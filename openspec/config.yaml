@@ -1,0 +1,9 @@
+schema: spec-driven
+context: |
+  Build tooling and GitHub Actions workflow that produce prebuilt Macus appliance images:
+  signature-verified Alpine Linux ARM64 cloud images with an exact, locked package set
+  (kernel, ZFS, Incus, QEMU) installed without booting them, published only as draft
+  GitHub releases. Macus (upmaru/macus) consumes the images: it pins each one by digest
+  in its catalog, verifies it at first boot and owns hardware qualification. This repo
+  never boots images, never qualifies them, never publishes releases and never edits the
+  Macus catalog. CI success is static evidence only, never boot, ZFS or hardware evidence.
