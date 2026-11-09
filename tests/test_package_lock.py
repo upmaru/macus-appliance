@@ -60,6 +60,12 @@ class LockFormatTest(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("APPLIANCE_APK_FIXTURES") == "1", "enable native APK fixtures")
 class APKIndexTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        image = subprocess.run(["docker", "image", "inspect", APK_IMAGE], capture_output=True)
+        if image.returncode:
+            subprocess.run(["docker", "pull", APK_IMAGE], check=True)
+
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -92,7 +98,7 @@ class APKIndexTest(unittest.TestCase):
             "ndx /indexes/main.APKINDEX.tar.gz\nndx /indexes/community.APKINDEX.tar.gz\n"
         )
         self.command = [
-            "docker", "run", "--rm", "--network", "none",
+            "docker", "run", "--rm", "--pull=never", "--network", "none",
             "-v", f"{self.root}:/indexes:ro", APK_IMAGE, "apk",
             "--arch", "aarch64", "--cache=no", "--network=no", "--keys-dir", "/indexes/keys",
             "--repositories-file", "/indexes/repositories",
