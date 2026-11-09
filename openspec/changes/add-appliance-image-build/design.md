@@ -62,12 +62,12 @@ Build steps:
 
 *Linux arm64 sizing, 2026-11-10:* The verified base uses Limine with a separate 160 MiB FAT32 EFI partition mounted at `/boot` and an ext4 root. The build configures Alpine's Limine updater to copy `BOOTAA64.EFI` to the guest ESP and updates the single Limine entry to select the channel kernel and initramfs. APK removed `linux-lts` from the Stable image. Removing its generated initramfs marker left only the Stable kernel module directory. Static inspection matched the initramfs contents and ZFS module version metadata to each selected kernel.
 
-Both channels installed all 411 locked packages. At a 4 GiB raw disk size, the smaller available space across channels was 2,269,577,216 bytes on root and 30,567,424 bytes on EFI. That leaves headroom for the locked images without changing the upstream EFI partition.
+Both channels installed all 411 locked packages. At a 4 GiB raw disk size, the smaller available space across channels was 2,269,569,024 bytes on root and 30,567,424 bytes on EFI. That leaves headroom for the locked images without changing the upstream EFI partition.
 
 | Channel | Kernel release | Root used (bytes) | Root available (bytes) | EFI available (bytes) |
 | --- | --- | ---: | ---: | ---: |
-| `lts` | `6.18.62-0-lts` | 1,549,225,984 | 2,270,175,232 | 45,601,792 |
-| `stable` | `7.1.5-0-stable` | 1,549,824,000 | 2,269,577,216 | 30,567,424 |
+| `lts` | `6.18.62-0-lts` | 1,549,230,080 | 2,270,171,136 | 45,601,792 |
+| `stable` | `7.1.5-0-stable` | 1,549,832,192 | 2,269,569,024 | 30,567,424 |
 
 The build config records the measured raw size of 4,294,967,296 bytes. The sizing runs inspected the filesystem offline. Macus hardware acceptance supplies boot and runtime evidence.
 
@@ -193,7 +193,7 @@ kernel_release=<release>
 
 - `.github/workflows/appliance-image.yml` runs only on `workflow_dispatch`, with inputs for channel (a `[channels.*]` name in `appliance.toml`), appliance ID and the commit to build, and a dry-run option that builds and checks without creating a release.
 - Validation and build jobs use read-only contents. A separate preflight job uses `contents: write` because GitHub exposes draft releases only to callers with push access. Preflight checks release and tag metadata with read-only API calls and does not check out or execute the build commit. The release job uses `contents: write`, `id-token: write` and `attestations: write` and rechecks the ID before creating the draft. Third-party actions are pinned by commit SHA. No secrets beyond the workflow's own token.
-- `actions/attest-build-provenance` attests the archive.
+- `actions/attest-build-provenance` attests the archive for each build, including dry runs. The dry-run path skips tag reservation and draft creation.
 - The regular `ci.yml` stays read-only and runs OpenSpec validation, script linting and unit tests with fixtures. It never builds or releases an image.
 
 ### 8. Channel cadence

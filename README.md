@@ -33,6 +33,7 @@ See the [image contract](docs/image-contract.md) for what Macus verifies and the
 mise trust
 mise install
 mise run spec:validate
+mise run lint
 APPLIANCE_APK_FIXTURES=1 mise exec -- python -m unittest discover -s tests -v
 ```
 
