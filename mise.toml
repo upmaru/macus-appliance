@@ -1,5 +1,6 @@
 [tools]
 node = "26.10.0"
+python = "3.12.16"
 "npm:@fission-ai/openspec" = "1.14.0"
 
 [tasks."spec:validate"]

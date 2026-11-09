@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [develop, main]
   push:
-    branches: [develop, main]
+    branches: [develop, main, 'feature/**']
   workflow_dispatch:
 
 permissions:
@@ -26,3 +26,25 @@ jobs:
           node-version: '22'
       - name: Validate OpenSpec
         run: npx --yes --package @fission-ai/openspec@1.14.0 openspec validate --all --strict --no-interactive
+
+  tooling:
+    name: Build tooling fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint Python and workflows
+        env:
+          GOBIN: ${{ runner.temp }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/appliance-lint"
+          "$RUNNER_TEMP/appliance-lint/bin/pip" install ruff==0.11.13
+          "$RUNNER_TEMP/appliance-lint/bin/ruff" check scripts tests
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$GOBIN/actionlint"
+      - name: Run unit tests with signed fixtures
+        env:
+          APPLIANCE_APK_FIXTURES: '1'
+        run: python3 -m unittest discover -s tests -v
