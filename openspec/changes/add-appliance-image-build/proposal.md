@@ -13,6 +13,7 @@ The build lives in this repository rather than in Macus so that its release-writ
 
 ## What Changes
 
+- **Build configuration:** one reviewed `appliance.toml` (TOML, read with Python's standard library) holds the Alpine branch, the pinned upstream image, the raw size, the shared package list and each channel's kernel packages. Exact versions stay in plain-text `name=version` locks that `apk` reads directly.
 - **Locked package sets per kernel channel:** two channels from the same Alpine v3.24 branch. `lts` carries `linux-lts`/`zfs-lts` from `main` (6.18.62 on 2026-11-09) and is Macus's default. `stable` carries `linux-stable`/`zfs-stable` from `community` (7.1.5 on 2026-11-09) for users who opt into a newer kernel. Both share the same ZFS 2.4.4, Incus 7.0.1 and QEMU 11.0.3 userland. Each channel has its own full, sorted lock that a human refreshes and reviews. Alpine edge is not used.
 - **Offline image build:** a manually dispatched GitHub Actions workflow on a GitHub-hosted Linux arm64 runner verifies the upstream Alpine 3.24.2 cloud image against Alpine's pinned signer and recorded digests, then installs the channel's exact locked packages into the image's root filesystem in a chroot, without booting it. An image carries exactly one kernel flavor.
 - **Static verification in CI:** installed packages equal the lock, the kernel, ZFS module and initramfs match, the boot configuration selects the channel's kernel, and the image carries no machine ID, host keys, cloud-init instance state, caches, logs or credentials. CI cannot boot the image and does not claim to.
@@ -23,7 +24,7 @@ The build lives in this repository rather than in Macus so that its release-writ
 
 ### New Capabilities
 
-- `appliance-image`: locked per-channel package sets, the offline image build, static verification, the image record contract, artifact format, draft release publication and retention.
+- `appliance-image`: build configuration, locked per-channel package sets, the offline image build, static verification, the image record contract, artifact format, draft release publication and retention.
 
 ### Modified Capabilities
 
@@ -31,6 +32,6 @@ None. This repository has no existing specs.
 
 ## Impact
 
-- New in this repository: build inputs, per-channel locks, a lock-refresh script, the build and static-check scripts, `.github/workflows/appliance-image.yml`, tests with fixture data, and documentation of the image contract and release flow.
+- New in this repository: `appliance.toml` and its loader, per-channel locks, a lock-refresh script, the build and static-check scripts, `.github/workflows/appliance-image.yml`, tests with fixture data, and documentation of the image contract and release flow.
 - Macus consumes the images through a separate change (upmaru/macus, `prebuilt-appliance-image`): its catalog pins published images from this repository's releases by digest, its seed carries the expected record values, its first boot verifies them, it selects the channel and it runs hardware qualification. This change does not modify Macus.
 - No effect on existing Macus appliances.

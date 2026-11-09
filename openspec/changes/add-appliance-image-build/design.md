@@ -49,10 +49,10 @@ Each ZFS module package depends on its exact kernel revision. Alpine edge has a 
 The workflow runs on a GitHub-hosted `ubuntu-24.04-arm` runner. The repository is public, so these runners are available without self-hosting. Installing into the image needs only native arm64 execution, loop devices and `chroot`.
 
 Build steps:
-1. Download the archive, its `.sha512` and `.asc`, and the signing key named in the build inputs. Verify the signature against the pinned fingerprint in an isolated GnuPG home, and verify the archive SHA-512 and extracted raw SHA-256 against the digests recorded in the build inputs, not only the downloaded sidecar. Extract exactly one regular `disk.raw` member.
-2. Extend `disk.raw` to the build size and grow the root partition and filesystem.
+1. Download the archive, its `.sha512` and `.asc`, and the signing key named in `appliance.toml`. Verify the signature against the pinned fingerprint in an isolated GnuPG home, and verify the archive SHA-512 and extracted raw SHA-256 against the digests recorded in `appliance.toml`, not only the downloaded sidecar. Extract exactly one regular `disk.raw` member.
+2. Extend `disk.raw` to `image.raw_bytes` and grow the root partition and filesystem.
 3. Attach it as a loop device with partitions, mount the root and boot/EFI partitions, and bind-mount `/dev`, `/proc` and `/sys` for package triggers. Provide a temporary `resolv.conf`.
-4. In a `chroot`, configure only `https://dl-cdn.alpinelinux.org/alpine/v3.24/main` and `/community`, run `apk update`, remove the channel's unused `/boot/dtbs-<flavor>` tree (the existing EFI space workaround), and install exactly the channel's lock. APK signature verification stays enabled with the image's own Alpine keys. For `stable`, remove `linux-lts` and its ZFS module so one kernel remains.
+4. In a `chroot`, configure only `https://dl-cdn.alpinelinux.org/alpine/v3.24/main` and `/community`, run `apk update`, remove the channel's unused `/boot/dtbs-<flavor>` tree (the existing EFI space workaround), and install exactly the channel's lock. APK signature verification stays enabled with the image's own Alpine keys. Remove the channel's `remove` packages (`linux-lts` for `stable`) so one kernel remains.
 5. Let package triggers (`mkinitfs` and the boot configuration update) run inside the chroot.
 6. Write the image record (Decision 5), clean the image (Decision 4), zero free blocks, unmount, detach and package (Decision 3).
 
@@ -65,21 +65,85 @@ Build steps:
 - Confirm `linux-lts` can be removed from the `stable` image. If a base package requires it, the build fails and this design is revisited rather than shipping two kernels.
 - Measure the raw size needed for the installed set plus headroom.
 
-### 2. One full lock per channel
+### 2. Build configuration in `appliance.toml`, plain-text locks per channel
 
-`locks/lts.lock` and `locks/stable.lock` (paths indicative) each list every package in the final image as `name=version`, one per line, sorted with `LC_ALL=C`. That is the complete installed closure, including the base image's packages, not only the top-level list.
+Image configuration has two kinds of file, both reviewed by a human and committed:
 
-- The top-level list (`inputs/packages.txt` or similar) mirrors Macus's current install set with Incus pinned exactly. Channels differ only in the kernel and ZFS module packages (`linux-lts`/`zfs-lts` or `linux-stable`/`zfs-stable`) and what those pull in.
-- A lock-refresh script resolves the current v3.24 `main`/`community` APKINDEX for a channel's top-level list and rewrites that lock. A human reviews the diff. It never runs automatically in CI.
+- **`appliance.toml`** at the repository root holds everything that defines an image except the exact package versions: the Alpine branch and repositories, the pinned upstream image, the target raw size, the shared top-level package list and each channel's kernel packages.
+- **`locks/<channel>.lock`** holds the exact versions, one `name=version` line per package.
+
+Values that change per build (appliance ID, channel to build, dry run) are workflow inputs, not configuration (Decision 7). The configuration holds no secrets.
+
+#### `appliance.toml`, schema 1
+
+```toml
+schema = 1
+
+[alpine]
+version = "3.24.2"
+branch = "v3.24"
+arch = "aarch64"
+repositories = [
+  "https://dl-cdn.alpinelinux.org/alpine/v3.24/main",
+  "https://dl-cdn.alpinelinux.org/alpine/v3.24/community",
+]
+
+[upstream]
+archive = "alpine-3.24.2-aarch64-cloudinit-metal-r0.raw.tar.gz"
+url = "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/cloud/alpine-3.24.2-aarch64-cloudinit-metal-r0.raw.tar.gz"
+archive_sha512 = "d8ed6f0f…"   # full value from Context
+archive_bytes = 626889284
+raw_sha256 = "47c0b69b…"       # full value from Context
+raw_bytes = 1073741824
+signing_key_url = "https://alpinelinux.org/keys/tomalok.asc"
+signer_fingerprint = "F26ADFADBAE702EF7AF637459DA7EF23BFFCDF22"
+
+[image]
+raw_bytes = 0                  # set by task 2.2 after measuring; the loader rejects 0
+packages = [                   # shared top-level list, copied from Macus bootstrap.sh
+  "incus=7.0.1-r2",
+  "incus-client=7.0.1-r2",
+  # …
+]
+
+[channels.lts]
+kernel_flavor = "lts"
+packages = ["linux-lts", "zfs-lts"]
+remove = []
+lock = "locks/lts.lock"
+
+[channels.stable]
+kernel_flavor = "stable"
+packages = ["linux-stable", "zfs-stable"]
+remove = ["linux-lts"]
+lock = "locks/stable.lock"
+```
+
+Rules for the configuration:
+
+- It is read with Python's standard-library `tomllib` (Python 3.11 or later; mise pins the version and `ubuntu-24.04-arm` ships 3.12). There is no third-party parser and nothing writes the file.
+- One loader validates it before any download. It rejects a missing or unknown key, a wrong type, `schema` other than 1, digests that are not lowercase hex of the right length, a fingerprint that is not 40 uppercase hex characters, a non-HTTPS URL, repositories other than exactly the `alpine.branch` `main` and `community` URLs, a channel whose name differs from its `kernel_flavor`, a `raw_bytes` that is zero or smaller than the upstream raw disk, and a lock path outside `locks/`. Every script and the workflow get their values from that loader, never by parsing the file themselves.
+- Package entries are APK world entries (`name` or `name=version`). Incus is pinned exactly. A channel's `packages` and `remove` lists hold only its kernel and ZFS-module packages; `remove` names base-image packages the channel must not keep. Everything else is in `image.packages`, so channels differ only there.
+- The workflow's `channel` input must name a `[channels.*]` table.
+- Comments are allowed and carry no meaning. Any change to the schema bumps `schema`; it is internal to this repository and does not change the image record contract (Decision 5).
+- The build report records the file's SHA-256 as `config_sha256`.
+
+#### Locks
+
+Each lock lists every package in the final image as `name=version`, one per line, sorted with `LC_ALL=C`, with no comments or blank lines, so the build can pass it to `apk add` as is and a refresh reviews as one changed line per package. That is the complete installed closure, including the base image's packages, not only the top-level list. Locks stay plain text rather than TOML for those two reasons.
+
+- A lock-refresh script resolves the current v3.24 `main`/`community` APKINDEX for a channel's `image.packages` plus its `packages`, applies its `remove` list and rewrites that lock. A human reviews the diff. The commit message records the refresh date and the APKINDEX digests used. It never runs automatically in CI.
 - After installation the build compares the installed set with the lock and fails on any missing, extra or different package.
 - The build fails if Alpine no longer serves a locked version. That is expected once Alpine moves on and does not affect published images.
+
+*Alternative considered:* YAML. Rejected because reading it needs PyYAML or a runner-provided `yq`, and its implicit typing can turn versions and digests into numbers or booleans. JSON was rejected because it cannot hold the comments that explain pins.
 
 ### 3. Artifact format
 
 - Keep Macus's existing archive format: a gzip tar with exactly one regular member `disk.raw`, so Macus acquisition and extraction keep working without a new decompressor.
 - The compressed archive must stay under GitHub's 2 GiB release asset limit. Raw size is fixed per build and reported.
 - Each build produces `<id>.raw.tar.gz`, `SHA512SUMS` (archive), `SHA256SUMS` (archive and raw disk), `<id>.manifest` (the installed manifest, Decision 5) and `<id>.build.json` (the build report).
-- The build report records: appliance ID, channel, Alpine branch, upstream archive name and verified digests, signer fingerprint, lock path and SHA-256, manifest SHA-256, kernel release, ZFS module version, raw bytes, raw SHA-256, archive bytes, archive SHA-512, repository, commit and workflow run URL. It contains no secrets or runner paths.
+- The build report records: appliance ID, channel, Alpine branch, upstream archive name and verified digests, signer fingerprint, `config_sha256`, lock path and SHA-256, manifest SHA-256, kernel release, ZFS module version, raw bytes, raw SHA-256, archive bytes, archive SHA-512, repository, commit and workflow run URL. It contains no secrets or runner paths.
 
 ### 4. Image contents and hygiene
 
@@ -120,7 +184,7 @@ kernel_release=<release>
 
 ### 7. Workflow and supply chain
 
-- `.github/workflows/appliance-image.yml` runs only on `workflow_dispatch`, with inputs for channel, appliance ID and the lock's commit, and a dry-run option that builds and checks without creating a release.
+- `.github/workflows/appliance-image.yml` runs only on `workflow_dispatch`, with inputs for channel (a `[channels.*]` name in `appliance.toml`), appliance ID and the commit to build, and a dry-run option that builds and checks without creating a release.
 - Permissions are limited to `contents: write`, `id-token: write` and `attestations: write` on the job that creates the release; build steps run with read-only contents. Third-party actions are pinned by commit SHA. No secrets beyond the workflow's own token.
 - `actions/attest-build-provenance` attests the archive.
 - The regular `ci.yml` stays read-only and runs OpenSpec validation, script linting and unit tests with fixtures. It never builds or releases an image.

@@ -2,9 +2,23 @@
 
 ## ADDED Requirements
 
+### Requirement: Build configuration
+
+Image configuration SHALL be one reviewed `appliance.toml` file, in a versioned schema, holding the Alpine branch and repositories, the pinned upstream image and signer, the target raw size, the shared top-level package list and each channel's kernel packages and removals. Exact package versions SHALL live only in the per-channel plain-text locks. A single loader using Python's standard-library TOML parser SHALL validate the file before any download and SHALL be the only way scripts and workflows read it. Per-build values such as the appliance ID SHALL be workflow inputs, and the configuration MUST NOT hold secrets. Each build report SHALL record the configuration's SHA-256.
+
+#### Scenario: Invalid configuration
+
+- **WHEN** `appliance.toml` has a missing or unknown key, a wrong type or schema, a malformed digest or fingerprint, a non-HTTPS URL, repositories other than the branch's `main` and `community`, or an unset raw size
+- **THEN** the build fails before downloading anything
+
+#### Scenario: Unknown channel
+
+- **WHEN** a build is dispatched for a channel that has no table in `appliance.toml`
+- **THEN** it fails before building
+
 ### Requirement: Locked channel package sets
 
-Each kernel channel SHALL have one reviewed lock listing every package in its image at an exact version. The `lts` channel SHALL use `linux-lts` and `zfs-lts`, and the `stable` channel SHALL use `linux-stable` and `zfs-stable`. Both SHALL come from the `main` and `community` repositories of the same Alpine stable branch and share the same top-level userland list. Locks MUST NOT use edge, testing or third-party repositories. A lock SHALL change only through a human-reviewed refresh, never automatically in CI.
+Each kernel channel SHALL have one reviewed lock listing every package in its image at an exact version, as sorted `name=version` lines with no other content. The `lts` channel SHALL use `linux-lts` and `zfs-lts`, and the `stable` channel SHALL use `linux-stable` and `zfs-stable`. Both SHALL come from the `main` and `community` repositories of the same Alpine stable branch and share the same top-level userland list. Locks MUST NOT use edge, testing or third-party repositories. A lock SHALL change only through a human-reviewed refresh, never automatically in CI.
 
 #### Scenario: Channel locks differ only in the kernel
 
