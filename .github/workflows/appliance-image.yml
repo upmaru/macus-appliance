@@ -1,0 +1,181 @@
+name: Appliance image
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Kernel channel from appliance.toml
+        type: string
+        required: true
+      appliance_id:
+        description: Unused appliance ID
+        type: string
+        required: true
+      commit:
+        description: Full source commit SHA
+        type: string
+        required: true
+      dry_run:
+        description: Build and check without creating a draft release
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: appliance-image-${{ inputs.appliance_id }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      appliance_id: ${{ steps.inputs.outputs.appliance_id }}
+      commit: ${{ steps.inputs.outputs.commit }}
+    steps:
+      - name: Require an exact commit
+        env:
+          SOURCE_SHA: ${{ inputs.commit }}
+        run: |
+          if [[ ! "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo 'A full lowercase commit SHA is required' >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - name: Validate build configuration and inputs
+        id: inputs
+        env:
+          APPLIANCE_ID: ${{ inputs.appliance_id }}
+          CHANNEL: ${{ inputs.channel }}
+          SOURCE_SHA: ${{ inputs.commit }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          python3 -m scripts.appliance_config --channel "$CHANNEL" --appliance-id "$APPLIANCE_ID"
+          printf 'appliance_id=%s\ncommit=%s\n' "$APPLIANCE_ID" "$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+
+  preflight:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      # GitHub shows draft releases only to callers with push access. This job uses GETs only.
+      contents: write
+    steps:
+      - &unused-id
+        name: Refuse an existing release or tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLIANCE_ID: ${{ needs.validate.outputs.appliance_id }}
+        run: |
+          [[ "$APPLIANCE_ID" =~ ^alpine-[0-9]+\.[0-9]+\.[0-9]+-(lts|stable)-[1-9][0-9]*$ ]]
+          releases=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            | jq -r --arg id "$APPLIANCE_ID" '.[] | select(.tag_name == $id) | .id')
+          tags=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$APPLIANCE_ID" \
+            | jq -r --arg ref "refs/tags/$APPLIANCE_ID" '.[] | select(.ref == $ref) | .ref')
+          if [[ -n "$releases" || -n "$tags" ]]; then
+            echo "Appliance ID already exists: $APPLIANCE_ID" >&2
+            exit 1
+          fi
+
+  build:
+    needs: [validate, preflight]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - name: Install Linux image tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            cloud-guest-utils curl e2fsprogs fdisk gdisk gnupg zerofree
+      - name: Build and statically verify the appliance
+        env:
+          APPLIANCE_ID: ${{ needs.validate.outputs.appliance_id }}
+          CHANNEL: ${{ inputs.channel }}
+          SOURCE_SHA: ${{ needs.validate.outputs.commit }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          sudo unshare --mount --propagation private -- python3 -B -m scripts.build_image \
+            --channel "$CHANNEL" \
+            --appliance-id "$APPLIANCE_ID" \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit "$SOURCE_SHA" \
+            --workflow-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --output out
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        id: upload
+        with:
+          name: ${{ needs.validate.outputs.appliance_id }}
+          path: out/
+          compression-level: 0
+          if-no-files-found: error
+
+  release:
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: out
+          merge-multiple: true
+      - name: Verify the release payload
+        working-directory: out
+        env:
+          APPLIANCE_ID: ${{ needs.validate.outputs.appliance_id }}
+          CHANNEL: ${{ inputs.channel }}
+          SOURCE_SHA: ${{ needs.validate.outputs.commit }}
+        run: |
+          [[ "$APPLIANCE_ID" =~ ^alpine-[0-9]+\.[0-9]+\.[0-9]+-(lts|stable)-[1-9][0-9]*$ ]]
+          archive="$APPLIANCE_ID.raw.tar.gz"
+          for asset in "$archive" SHA512SUMS SHA256SUMS "$APPLIANCE_ID.manifest" "$APPLIANCE_ID.build.json"; do
+            [[ -f "$asset" && ! -L "$asset" && -s "$asset" ]]
+          done
+          test "$(stat -c '%s' "$archive")" -lt 2147483648
+          sha512sum "$archive" | cmp -s - SHA512SUMS
+          manifest_digest=$(sha256sum "$APPLIANCE_ID.manifest" | cut -d ' ' -f 1)
+          jq -e --arg id "$APPLIANCE_ID" --arg channel "$CHANNEL" --arg commit "$SOURCE_SHA" \
+            --arg digest "$manifest_digest" \
+            '.appliance_id == $id and .channel == $channel and .commit == $commit and .manifest_sha256 == $digest' \
+            "$APPLIANCE_ID.build.json"
+          raw_digest=$(jq -er '.raw_sha256 | select(test("^[a-f0-9]{64}$"))' "$APPLIANCE_ID.build.json")
+          { sha256sum "$archive"; printf '%s  disk.raw\n' "$raw_digest"; } | cmp -s - SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: out/${{ needs.validate.outputs.appliance_id }}.raw.tar.gz
+      - *unused-id
+      - name: Reserve the tag and create the draft release
+        if: ${{ !inputs.dry_run }}
+        working-directory: out
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLIANCE_ID: ${{ needs.validate.outputs.appliance_id }}
+          SOURCE_SHA: ${{ needs.validate.outputs.commit }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f "ref=refs/tags/$APPLIANCE_ID" -f "sha=$SOURCE_SHA" > /dev/null
+          gh release create "$APPLIANCE_ID" --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --draft --latest=false --title "$APPLIANCE_ID" \
+            --notes "Static build evidence only. Macus hardware qualification is required before publication." \
+            "$APPLIANCE_ID.raw.tar.gz" SHA512SUMS SHA256SUMS \
+            "$APPLIANCE_ID.manifest" "$APPLIANCE_ID.build.json"

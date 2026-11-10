@@ -1,0 +1,67 @@
+# The raw disk size was measured for both channels on Linux arm64.
+schema = 1
+
+[alpine]
+version = "3.24.2"
+branch = "v3.24"
+arch = "aarch64"
+repositories = [
+  "https://dl-cdn.alpinelinux.org/alpine/v3.24/main",
+  "https://dl-cdn.alpinelinux.org/alpine/v3.24/community",
+]
+
+[upstream]
+archive = "alpine-3.24.2-aarch64-cloudinit-metal-r0.raw.tar.gz"
+url = "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/cloud/alpine-3.24.2-aarch64-cloudinit-metal-r0.raw.tar.gz"
+archive_sha512 = "d8ed6f0fa98d15218c351d2903d961b2cec68a7fd39ec8567fae9c49d943ae21f5cd56754497480a0cf899332acc632617b531b153e12e81d1f021c81f634518"
+archive_bytes = 626889284
+raw_sha256 = "47c0b69be2a3458c2a1ff11519e8f4b3f6565a73e89a2fe2294ed0ca3e496516"
+raw_bytes = 1073741824
+signing_key_url = "https://alpinelinux.org/keys/tomalok.asc"
+signer_fingerprint = "F26ADFADBAE702EF7AF637459DA7EF23BFFCDF22"
+
+[image]
+raw_bytes = 4294967296
+packages = [
+  "incus",
+  "incus-client",
+  "incus-openrc",
+  "incus-vm",
+  "skopeo",
+  "qemu-system-aarch64",
+  "qemu-audio-spice",
+  "qemu-hw-display-virtio-gpu-pci",
+  "qemu-hw-usb-host",
+  "qemu-chardev-spice",
+  "qemu-hw-usb-redirect",
+  "qemu-ui-spice-core",
+  "aavmf",
+  "virtiofsd",
+  "ca-certificates",
+  "e2fsprogs",
+  "e2fsprogs-extra",
+  "util-linux-misc",
+  "blkid",
+  "python3",
+  "shadow-subids",
+  "lxcfs",
+  "lxcfs-openrc",
+  "nftables",
+  "acpid",
+  "acpid-openrc",
+  "zfs",
+  "zfs-libs",
+  "zfs-openrc",
+]
+
+[channels.lts]
+kernel_flavor = "lts"
+packages = ["linux-lts", "zfs-lts"]
+remove = []
+lock = "locks/lts.lock"
+
+[channels.stable]
+kernel_flavor = "stable"
+packages = ["linux-stable", "zfs-stable"]
+remove = ["linux-lts"]
+lock = "locks/stable.lock"

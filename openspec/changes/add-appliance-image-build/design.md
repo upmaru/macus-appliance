@@ -60,10 +60,16 @@ Build steps:
 
 *Alternative considered:* `alpine-make-vm-image` creating a disk from scratch. Rejected for now because starting from the signed official cloud image keeps the EFI, cloud-init and partition layout that Macus hardware acceptance already covers. Its techniques may still be borrowed.
 
-*Open points for implementation:*
-- Confirm the Alpine cloud metal image's bootloader mechanism, and prove statically that the boot configuration selects the channel's installed kernel and initramfs, failing otherwise.
-- Confirm `linux-lts` can be removed from the `stable` image. If a base package requires it, the build fails and this design is revisited rather than shipping two kernels.
-- Measure the raw size needed for the installed set plus headroom.
+*Linux arm64 sizing, 2026-11-10:* The verified base uses Limine with a separate 160 MiB FAT32 EFI partition mounted at `/boot` and an ext4 root. The build configures Alpine's Limine updater to copy `BOOTAA64.EFI` to the guest ESP and updates the single Limine entry to select the channel kernel and initramfs. APK removed `linux-lts` from the Stable image. Removing its generated initramfs marker left only the Stable kernel module directory. Static inspection matched the initramfs contents and ZFS module version metadata to each selected kernel.
+
+Both channels installed all 411 locked packages. At a 4 GiB raw disk size, the smaller available space across channels was 2,269,569,024 bytes on root and 30,567,424 bytes on EFI. That leaves headroom for the locked images without changing the upstream EFI partition.
+
+| Channel | Kernel release | Root used (bytes) | Root available (bytes) | EFI available (bytes) |
+| --- | --- | ---: | ---: | ---: |
+| `lts` | `6.18.62-0-lts` | 1,549,230,080 | 2,270,171,136 | 45,601,792 |
+| `stable` | `7.1.5-0-stable` | 1,549,832,192 | 2,269,569,024 | 30,567,424 |
+
+The build config records the measured raw size of 4,294,967,296 bytes. The sizing runs inspected the filesystem offline. Macus hardware acceptance supplies boot and runtime evidence.
 
 ### 2. Build configuration in `appliance.toml`, plain-text locks per channel
 
@@ -99,10 +105,10 @@ signing_key_url = "https://alpinelinux.org/keys/tomalok.asc"
 signer_fingerprint = "F26ADFADBAE702EF7AF637459DA7EF23BFFCDF22"
 
 [image]
-raw_bytes = 0                  # set by task 2.2 after measuring; the loader rejects 0
+raw_bytes = 4294967296         # verified on Linux arm64 for both channels
 packages = [                   # shared top-level list, copied from Macus bootstrap.sh
-  "incus=7.0.1-r2",
-  "incus-client=7.0.1-r2",
+  "incus",
+  "incus-client",
   # …
 ]
 
@@ -123,7 +129,8 @@ Rules for the configuration:
 
 - It is read with Python's standard-library `tomllib` (Python 3.11 or later; mise pins the version and `ubuntu-24.04-arm` ships 3.12). There is no third-party parser and nothing writes the file.
 - One loader validates it before any download. It rejects a missing or unknown key, a wrong type, `schema` other than 1, digests that are not lowercase hex of the right length, a fingerprint that is not 40 uppercase hex characters, a non-HTTPS URL, repositories other than exactly the `alpine.branch` `main` and `community` URLs, a channel whose name differs from its `kernel_flavor`, a `raw_bytes` that is zero or smaller than the upstream raw disk, and a lock path outside `locks/`. Every script and the workflow get their values from that loader, never by parsing the file themselves.
-- Package entries are APK world entries (`name` or `name=version`). Incus is pinned exactly. A channel's `packages` and `remove` lists hold only its kernel and ZFS-module packages; `remove` names base-image packages the channel must not keep. Everything else is in `image.packages`, so channels differ only there.
+- Configuration package entries are APK package names. Both locks pin the same exact versions of `incus`, `incus-client`, `incus-openrc` and `incus-vm`. A channel's `packages` and `remove` lists hold only its kernel and ZFS-module packages; `remove` names base-image packages the channel must not keep. Everything else is in `image.packages`, so channels differ only there.
+- Develop the loader against fixtures. For Linux arm64 sizing, use a temporary config with an explicit candidate size that passes the same loader; measure the installed set plus headroom for both channels. Commit `appliance.toml` with the measured size and verify it with the loader before closing task 1.1.
 - The workflow's `channel` input must name a `[channels.*]` table.
 - Comments are allowed and carry no meaning. Any change to the schema bumps `schema`; it is internal to this repository and does not change the image record contract (Decision 5).
 - The build report records the file's SHA-256 as `config_sha256`.
@@ -177,7 +184,7 @@ kernel_release=<release>
 ### 6. Appliance IDs, releases and retention
 
 - An appliance ID names one exact image: `alpine-<alpine version>-<channel>-<n>`, for example `alpine-3.24.2-lts-1` and `alpine-3.24.2-stable-1`, where `<n>` increases per channel. The release tag equals the ID.
-- The workflow refuses an ID that already has a release or tag, so IDs are never reused.
+- Preflight refuses an ID that already has a release or tag. The release job checks again and atomically reserves the tag at the source commit before creating the draft. The tag continues to reserve the ID if asset upload fails or a human deletes a failed draft.
 - Builds create **draft** releases only. Draft assets are not public; Macus qualification downloads them with authenticated `gh release download` and supplies them through its test-only path.
 - A human publishes a release only after Macus has recorded hardware qualification of that exact draft (matching archive and raw digests). The release notes link that evidence. A failed qualification leaves the release unpublished, and it may be deleted only while still a draft.
 - Published releases and assets are never deleted or replaced, because released Macus versions pin them. Any change to an image needs a new ID.
@@ -185,8 +192,8 @@ kernel_release=<release>
 ### 7. Workflow and supply chain
 
 - `.github/workflows/appliance-image.yml` runs only on `workflow_dispatch`, with inputs for channel (a `[channels.*]` name in `appliance.toml`), appliance ID and the commit to build, and a dry-run option that builds and checks without creating a release.
-- Permissions are limited to `contents: write`, `id-token: write` and `attestations: write` on the job that creates the release; build steps run with read-only contents. Third-party actions are pinned by commit SHA. No secrets beyond the workflow's own token.
-- `actions/attest-build-provenance` attests the archive.
+- Validation and build jobs use read-only contents. A separate preflight job uses `contents: write` because GitHub exposes draft releases only to callers with push access. Preflight checks release and tag metadata with read-only API calls and does not check out or execute the build commit. The release job uses `contents: write`, `id-token: write` and `attestations: write` and rechecks the ID before creating the draft. Third-party actions are pinned by commit SHA. No secrets beyond the workflow's own token.
+- `actions/attest-build-provenance` attests the archive for each build, including dry runs. The dry-run path skips tag reservation and draft creation.
 - The regular `ci.yml` stays read-only and runs OpenSpec validation, script linting and unit tests with fixtures. It never builds or releases an image.
 
 ### 8. Channel cadence

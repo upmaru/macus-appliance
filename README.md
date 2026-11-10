@@ -25,7 +25,7 @@ Both channels share the same ZFS userland, Incus and QEMU packages from the same
 
 ## Status
 
-Planning. See [`openspec/changes`](openspec/changes) for the image build change.
+See the [image contract](docs/image-contract.md) for what Macus verifies and the [release process](docs/release.md) for lock refresh, builds and hardware qualification. Track implementation in [OpenSpec](openspec/changes/add-appliance-image-build).
 
 ## Development
 
@@ -33,6 +33,8 @@ Planning. See [`openspec/changes`](openspec/changes) for the image build change.
 mise trust
 mise install
 mise run spec:validate
+mise run lint
+APPLIANCE_APK_FIXTURES=1 mise exec -- python -m unittest discover -s tests -v
 ```
 
 See [AGENTS.md](AGENTS.md) for project rules.
