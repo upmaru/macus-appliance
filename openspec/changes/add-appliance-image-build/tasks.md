@@ -31,6 +31,6 @@
 ## 6. Verification and first images
 
 - [x] 6.1 Run all checks and `mise exec -- openspec validate --all --strict --no-interactive`.
-- [ ] 6.2 With user authorization, dispatch the workflow for `lts` (`alpine-3.24.2-lts-1`) and record the run, digests and manifest. CI success is not hardware evidence.
-- [ ] 6.3 With user authorization, dispatch the workflow for `stable` (`alpine-3.24.2-stable-1`) and record the same. Neither build depends on the other.
-- [ ] 6.4 Hand the draft releases to Macus for hardware qualification. Do not publish a release, create other tags or merge without user authorization; publication follows Macus's recorded evidence.
+- [x] 6.2 With user authorization, dispatch the workflow for `lts` (`alpine-3.24.2-lts-1`) and record the run, digests and manifest. CI success is not hardware evidence.
+- [x] 6.3 With user authorization, dispatch the workflow for `stable` (`alpine-3.24.2-stable-1`) and record the same. Neither build depends on the other.
+- [x] 6.4 Hand the draft releases to Macus for hardware qualification. Do not publish a release, create other tags or merge without user authorization; publication follows Macus's recorded evidence.

@@ -189,6 +189,21 @@ kernel_release=<release>
 - A human publishes a release only after Macus has recorded hardware qualification of that exact draft (matching archive and raw digests). The release notes link that evidence. A failed qualification leaves the release unpublished, and it may be deleted only while still a draft.
 - Published releases and assets are never deleted or replaced, because released Macus versions pin them. Any change to an image needs a new ID.
 
+#### Draft images for Macus hardware qualification
+
+Both drafts were built from `2814fe68917380dd748b8e3a4433d76f56f04835` on 2026-11-10. Each installed manifest contains 411 entries and matches its source lock byte for byte after conversion to the format-1 manifest. The draft assets are available through authenticated `gh release download`. Macus hardware acceptance is pending.
+
+- `alpine-3.24.2-lts-1`, kernel `6.18.62-0-lts`, archive 823,516,002 bytes. [Draft](https://github.com/upmaru/macus-appliance/releases/tag/untagged-a1570a467cd6bd50f127) · [Run](https://github.com/upmaru/macus-appliance/actions/runs/42778137716) · [Attestation](https://github.com/upmaru/macus-appliance/attestations/65706109) · [Installed manifest asset API](https://api.github.com/repos/upmaru/macus-appliance/releases/assets/730592116)
+  - Archive SHA-512 `596ff56397d38f7d276acf485445b588b86125d33523a2f7d26d989af30f90fe2f23686bcc8bb72dee709a1f1c7a365f3427626153c639526263f3390b41cf6c`
+  - Archive SHA-256 `7c5f351caa1aef3dff6fc68892f3b2e14eb805a4554c2b6ebe17a42acee24678`
+  - Raw disk SHA-256 `23c5786327bc272b2a493eeafc9cb367dc4d4f471a46e4154f6c0946fa332380`
+  - Installed manifest SHA-256 `50f32997ef0584476459fb961c8317aef8d5bc6ca68206929a69a986ce45130e`
+- `alpine-3.24.2-stable-1`, kernel `7.1.5-0-stable`, archive 827,359,797 bytes. [Draft](https://github.com/upmaru/macus-appliance/releases/tag/untagged-9b6cfb8d3a02c51d28ed) · [Run](https://github.com/upmaru/macus-appliance/actions/runs/42778141969) · [Attestation](https://github.com/upmaru/macus-appliance/attestations/65706513) · [Installed manifest asset API](https://api.github.com/repos/upmaru/macus-appliance/releases/assets/730595314)
+  - Archive SHA-512 `3111003ac2db937acbf0824e7aa0c8416f8972c7948dd9211fe6ed555f514f01bbef8677a075ef512ee45d3709f38e6a9d2310a3b4e5d7329e736a3b5ae7b36a`
+  - Archive SHA-256 `ad5d21f0228484478b7e7a84a713146563d8c25970fb904145c5bb2251474376`
+  - Raw disk SHA-256 `6d37778dfa9e0017402692f0f77c89b68b959fd4ae894b3f4d350d329e387fd3`
+  - Installed manifest SHA-256 `ae065418241949cd75dd0b3ae807ce8232d0cc9fee2aee916e8a436531f459fa`
+
 ### 7. Workflow and supply chain
 
 - `.github/workflows/appliance-image.yml` runs only on `workflow_dispatch`, with inputs for channel (a `[channels.*]` name in `appliance.toml`), appliance ID and the commit to build, and a dry-run option that builds and checks without creating a release.
