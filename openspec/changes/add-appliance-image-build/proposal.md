@@ -18,7 +18,9 @@ The build lives in this repository rather than in Macus so that its release-writ
 - **Offline image build:** a manually dispatched GitHub Actions workflow on a GitHub-hosted Linux arm64 runner verifies the upstream Alpine 3.24.2 cloud image against Alpine's pinned signer and recorded digests, then installs the channel's exact locked packages into the image's root filesystem in a chroot, without booting it. An image carries exactly one kernel flavor.
 - **Static verification in CI:** installed packages equal the lock, the kernel, ZFS module and initramfs match, the boot configuration selects the channel's kernel, and the image carries no machine ID, host keys, cloud-init instance state, caches, logs or credentials. CI cannot boot the image and does not claim to.
 - **Versioned image record:** each image carries `/etc/macus-appliance-image` (format 1: appliance ID, channel, Alpine branch, lock digest, installed-manifest digest, kernel release) and `/etc/tama-zfs-qualified-kernel`. The manifest digest is defined exactly, so Macus can recompute it at first boot.
-- **Draft releases only:** the workflow attaches the compressed image, digests, installed manifest, build report and a build provenance attestation to a **draft** release tagged with a new appliance ID. A human publishes it only after Macus records hardware qualification for that exact image. Published images are never deleted or replaced.
+- **Draft releases only:** the workflow attaches the compressed image, digests, installed manifest, build report and a build provenance attestation to a **draft** release tagged with a new appliance ID. A human publishes it only after Macus records local hardware qualification for that exact image. Published images are never deleted or replaced.
+
+- **Local Macus qualification:** An operator explicitly opts in on a physical Apple Silicon Mac. Macus tests the exact draft in isolated state and records the hardware results against the image digests. The existing LTS pass satisfies this step. Stable's default nested KVM check remains open. Both releases remain drafts. CI qualification is deferred.
 
 ## Capabilities
 

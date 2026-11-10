@@ -20,7 +20,7 @@
 
 ## 4. Workflow
 
-- [ ] 4.1 Add `.github/workflows/appliance-image.yml`: `workflow_dispatch` only, inputs for channel (validated against `appliance.toml`), appliance ID, commit and dry run; `ubuntu-24.04-arm`; SHA-pinned actions; read-only validation and build jobs, a preflight job with contents write permission for read-only draft and tag queries, and write permissions for attestation and draft creation on the release job; refuse an ID that already has a release or tag before building; `actions/attest-build-provenance` on the archive; create a **draft** release tagged with the ID and never publish it or mark it latest; verify with actionlint and a dry run that creates no release.
+- [x] 4.1 Add `.github/workflows/appliance-image.yml`: `workflow_dispatch` only, inputs for channel (validated against `appliance.toml`), appliance ID, commit and dry run; `ubuntu-24.04-arm`; SHA-pinned actions; read-only validation and build jobs, a preflight job with contents write permission for read-only draft and tag queries, and write permissions for attestation and draft creation on the release job; refuse an ID that already has a release or tag before building; `actions/attest-build-provenance` on the archive; create a **draft** release tagged with the ID and never publish it or mark it latest; verify with actionlint and a dry run that creates no release.
 - [x] 4.2 Extend `ci.yml` (read-only) to lint scripts and run the unit tests alongside OpenSpec validation; verify it passes on the feature branch.
 
 ## 5. Documentation
@@ -28,9 +28,10 @@
 - [x] 5.1 Write `docs/image-contract.md` restating the image record format 1, manifest rule, kernel record, artifact names and build report fields for Macus implementers.
 - [x] 5.2 Document lock refresh, building, draft releases, the hand-off to Macus qualification, publication, retention and the per-channel ID scheme in `docs/release.md`, and update `README.md`.
 
-## 6. Verification and first images
+## 6. Verification and first drafts
 
 - [x] 6.1 Run all checks and `mise exec -- openspec validate --all --strict --no-interactive`.
-- [ ] 6.2 With user authorization, dispatch the workflow for `lts` (`alpine-3.24.2-lts-1`) and record the run, digests and manifest. CI success is not hardware evidence.
-- [ ] 6.3 With user authorization, dispatch the workflow for `stable` (`alpine-3.24.2-stable-1`) and record the same. Neither build depends on the other.
-- [ ] 6.4 Hand the draft releases to Macus for hardware qualification. Do not publish a release, create other tags or merge without user authorization; publication follows Macus's recorded evidence.
+- [x] 6.2 With user authorization, dispatch the workflow for `lts` (`alpine-3.24.2-lts-1`) and record the run, digests and manifest. CI success is not hardware evidence.
+- [x] 6.3 With user authorization, dispatch the workflow for `stable` (`alpine-3.24.2-stable-1`) and record the same. Neither build depends on the other.
+- [x] 6.4 Hand the exact draft archives and verified digests to Macus for operator-initiated local qualification. Confirm both releases remain drafts.
+- [x] 6.5 Record the existing passing local result for `alpine-3.24.2-lts-1` against its matching archive, raw disk and manifest digests. Link the [Macus hardware report](https://github.com/upmaru/macus/blob/e76eb18b6f4ca02cd366f4a233cad078d5f0e4f1/docs/testing/prebuilt-draft-qualification.json) and leave [Stable task 4.3](https://github.com/upmaru/macus/blob/e76eb18b6f4ca02cd366f4a233cad078d5f0e4f1/openspec/changes/prebuilt-appliance-image/tasks.md#4-verification-and-adoption) open for default nested KVM.
