@@ -196,6 +196,8 @@ kernel_release=<release>
 - `actions/attest-build-provenance` attests the archive for each build, including dry runs. The dry-run path skips tag reservation and draft creation.
 - The regular `ci.yml` stays read-only and runs OpenSpec validation, script linting and unit tests with fixtures. It never builds or releases an image.
 
+*Hosted dry run, 2026-11-10:* GitHub Actions built and statically verified `alpine-3.24.2-lts-9001` from `2814fe68917380dd748b8e3a4433d76f56f04835` on Linux arm64. The build installed all 411 locked packages and produced a 4 GiB raw disk with kernel `6.18.62-0-lts`. Payload verification and provenance attestation passed. GitHub skipped tag reservation and draft creation, and repository queries confirmed the test ID has neither a tag nor a release. [Workflow run](https://github.com/upmaru/macus-appliance/actions/runs/42776991374) · [Attestation](https://github.com/upmaru/macus-appliance/attestations/65703615)
+
 ### 8. Channel cadence
 
 `linux-stable` moves across kernel series during a branch's lifetime (for example 7.1 to 7.2), while `linux-lts` stays on one series. Each channel's lock, builds and releases are independent, so `stable` can move without touching `lts`. When Alpine moves on, the next build fails on the stale lock until a human refreshes it; published images keep working.

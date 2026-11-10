@@ -20,7 +20,7 @@
 
 ## 4. Workflow
 
-- [ ] 4.1 Add `.github/workflows/appliance-image.yml`: `workflow_dispatch` only, inputs for channel (validated against `appliance.toml`), appliance ID, commit and dry run; `ubuntu-24.04-arm`; SHA-pinned actions; read-only validation and build jobs, a preflight job with contents write permission for read-only draft and tag queries, and write permissions for attestation and draft creation on the release job; refuse an ID that already has a release or tag before building; `actions/attest-build-provenance` on the archive; create a **draft** release tagged with the ID and never publish it or mark it latest; verify with actionlint and a dry run that creates no release.
+- [x] 4.1 Add `.github/workflows/appliance-image.yml`: `workflow_dispatch` only, inputs for channel (validated against `appliance.toml`), appliance ID, commit and dry run; `ubuntu-24.04-arm`; SHA-pinned actions; read-only validation and build jobs, a preflight job with contents write permission for read-only draft and tag queries, and write permissions for attestation and draft creation on the release job; refuse an ID that already has a release or tag before building; `actions/attest-build-provenance` on the archive; create a **draft** release tagged with the ID and never publish it or mark it latest; verify with actionlint and a dry run that creates no release.
 - [x] 4.2 Extend `ci.yml` (read-only) to lint scripts and run the unit tests alongside OpenSpec validation; verify it passes on the feature branch.
 
 ## 5. Documentation
