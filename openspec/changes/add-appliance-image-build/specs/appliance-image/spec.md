@@ -74,12 +74,12 @@ Each build SHALL produce a gzip tar archive containing exactly one regular membe
 
 ### Requirement: Draft release and retention
 
-Image builds SHALL run only on manual dispatch with minimal permissions and SHA-pinned third-party actions, and SHALL create a draft release tagged with a new appliance ID that names the Alpine version and channel. A build MUST refuse an appliance ID that already has a release or tag. Workflows and agents MUST NOT publish a release, mark one latest, or delete or replace a published asset. A human SHALL publish a release only after Macus has recorded hardware qualification of that exact draft. Published images SHALL remain available and unchanged; any changed image requires a new appliance ID.
+Image builds SHALL run only on manual dispatch with minimal permissions and SHA-pinned third-party actions, and SHALL create a draft release only when dry run is disabled, tagged with a new appliance ID that names the Alpine version and channel. A build MUST refuse an appliance ID that already has a release or tag. Workflows and agents MUST NOT publish a release, mark one latest, or delete or replace a published asset. A human SHALL publish a release only after Macus has recorded passing local hardware qualification of that exact draft. Published images SHALL remain available and unchanged; any changed image requires a new appliance ID.
 
 #### Scenario: Draft only
 
-- **WHEN** the build workflow completes
-- **THEN** its release is a draft and nothing is published
+- **WHEN** an authorized build completes with dry run disabled
+- **THEN** GitHub Actions stages a draft release and does not start hardware qualification
 
 #### Scenario: Reused appliance ID
 
@@ -88,8 +88,22 @@ Image builds SHALL run only on manual dispatch with minimal permissions and SHA-
 
 #### Scenario: Qualified image published
 
-- **WHEN** Macus records hardware qualification for a draft image with matching digests
-- **THEN** a human may publish that release, and it is never deleted or replaced afterwards
+- **WHEN** a human reviews a passing Macus result for the matching draft and digests
+- **THEN** the human may publish that release, and it is never deleted or replaced afterwards
+
+### Requirement: Local Macus hardware qualification
+
+Macus SHALL qualify draft images only after operator opt-in on a physical Apple Silicon Mac with isolated runtime state. A passing report SHALL identify the draft, source commit, archive, raw disk and manifest digests, Macus revision and hardware check results.
+
+#### Scenario: Exact draft on local hardware
+
+- **WHEN** Macus verifies the draft at first boot and passes the required storage, workload, VirtioFS, relay and default nested KVM checks on the local Mac
+- **THEN** the operator records the passing result for those exact image digests, and the release remains a draft pending human publication
+
+#### Scenario: Existing matching evidence
+
+- **WHEN** the draft's digests match an existing passing Macus report for the required hardware checks
+- **THEN** the operator can use that report for this draft
 
 #### Scenario: Failed qualification
 

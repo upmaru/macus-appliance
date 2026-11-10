@@ -185,13 +185,13 @@ kernel_release=<release>
 
 - An appliance ID names one exact image: `alpine-<alpine version>-<channel>-<n>`, for example `alpine-3.24.2-lts-1` and `alpine-3.24.2-stable-1`, where `<n>` increases per channel. The release tag equals the ID.
 - Preflight refuses an ID that already has a release or tag. The release job checks again and atomically reserves the tag at the source commit before creating the draft. The tag continues to reserve the ID if asset upload fails or a human deletes a failed draft.
-- Builds create **draft** releases only. Draft assets are not public; Macus qualification downloads them with authenticated `gh release download` and supplies them through its test-only path.
-- A human publishes a release only after Macus has recorded hardware qualification of that exact draft (matching archive and raw digests). The release notes link that evidence. A failed qualification leaves the release unpublished, and it may be deleted only while still a draft.
+- Builds create **draft** releases only. An authorized operator uses authenticated `gh release download` to acquire the exact draft assets and supplies the verified archive and pins to the Macus debug loader on a local physical Apple Silicon Mac.
+- A human publishes a release only after Macus has recorded passing local hardware qualification of that exact draft with matching archive, raw-disk and manifest digests. The release notes link that evidence. A failed qualification leaves the release unpublished, and it may be deleted only while still a draft.
 - Published releases and assets are never deleted or replaced, because released Macus versions pin them. Any change to an image needs a new ID.
 
 #### Draft images for Macus hardware qualification
 
-Both drafts were built from `2814fe68917380dd748b8e3a4433d76f56f04835` on 2026-11-10. Each installed manifest contains 411 entries and matches its source lock byte for byte after conversion to the format-1 manifest. The draft assets are available through authenticated `gh release download`. Macus hardware acceptance is pending.
+Both drafts were built from `2814fe68917380dd748b8e3a4433d76f56f04835` on 2026-11-10. Each installed manifest contains 411 entries and matches its source lock byte for byte after conversion to the format-1 manifest. The draft assets are available through authenticated `gh release download`. Both releases remain drafts.
 
 - `alpine-3.24.2-lts-1`, kernel `6.18.62-0-lts`, archive 823,516,002 bytes. [Draft](https://github.com/upmaru/macus-appliance/releases/tag/untagged-a1570a467cd6bd50f127) · [Run](https://github.com/upmaru/macus-appliance/actions/runs/42778137716) · [Attestation](https://github.com/upmaru/macus-appliance/attestations/65706109) · [Installed manifest asset API](https://api.github.com/repos/upmaru/macus-appliance/releases/assets/730592116)
   - Archive SHA-512 `596ff56397d38f7d276acf485445b588b86125d33523a2f7d26d989af30f90fe2f23686bcc8bb72dee709a1f1c7a365f3427626153c639526263f3390b41cf6c`
@@ -203,6 +203,28 @@ Both drafts were built from `2814fe68917380dd748b8e3a4433d76f56f04835` on 2026-1
   - Archive SHA-256 `ad5d21f0228484478b7e7a84a713146563d8c25970fb904145c5bb2251474376`
   - Raw disk SHA-256 `6d37778dfa9e0017402692f0f77c89b68b959fd4ae894b3f4d350d329e387fd3`
   - Installed manifest SHA-256 `ae065418241949cd75dd0b3ae807ce8232d0cc9fee2aee916e8a436531f459fa`
+
+#### Local Macus hardware qualification
+
+GitHub Actions builds, verifies and stages drafts on Linux ARM64. After staging,
+an operator verifies the draft's provenance and digests and opts in to the
+Macus debug loader on a physical Apple Silicon Mac. Use fresh isolated runtime
+state and a separate Incus client configuration. Macus checks the installed
+manifest and expected kernel before storage, then exercises ZFS, workloads,
+VirtioFS, relay and default nested KVM. Record the actual host, Macus revision,
+image digests, check outcomes and clean shutdown. Preserve failed state and logs.
+[Macus runbook](https://github.com/upmaru/macus/blob/e76eb18b6f4ca02cd366f4a233cad078d5f0e4f1/Integration/qualification/README.md#prebuilt-draft-appliances)
+
+The existing Macus report records a passing local run for
+`alpine-3.24.2-lts-1` with the digests above, including nested Debian guest-agent
+exec and clean shutdown. Use that evidence for the current draft. Stable
+verified first boot and passed storage, VirtioFS and relay checks. Its default
+nested KVM guest still locks up. The MSI-off result remains diagnostic, and
+Macus task 4.3 stays open. [Hardware report](https://github.com/upmaru/macus/blob/e76eb18b6f4ca02cd366f4a233cad078d5f0e4f1/docs/testing/prebuilt-draft-qualification.json) · [Macus task 4.3](https://github.com/upmaru/macus/blob/e76eb18b6f4ca02cd366f4a233cad078d5f0e4f1/openspec/changes/prebuilt-appliance-image/tasks.md#4-verification-and-adoption)
+
+The Namespace macOS 27 probe reported both Virtualization.framework support
+and nested virtualization as unavailable. Hardware qualification remains
+local. [Namespace probe](https://github.com/upmaru/macus-appliance/actions/runs/42823187444)
 
 ### 7. Workflow and supply chain
 
