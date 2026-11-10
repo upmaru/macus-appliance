@@ -1,16 +1,20 @@
+from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
-from scripts.build_image import fs_usage
+from scripts.build_image import fs_usage, install_locked
 from scripts.image_artifacts import package
 from scripts.image_contents import KERNEL_RECORD, LIMINE_CONFIG, RECORD
 from scripts.image_contents import check_installed, check_kernel, check_records, manifest_bytes
 from scripts.image_contents import prune_retired_modules, record_bytes, select_kernel, write_records
+from scripts.image_disk import GUEST_ENV
 from scripts.image_hygiene import check_hygiene, clean_image
+from scripts.package_lock import decode_lock
 from scripts.upstream import extract_disk
 
 
@@ -86,6 +90,55 @@ class ImageTest(unittest.TestCase):
                 check_installed(PACKAGES, installed, APK_INFO)
         with self.assertRaisesRegex(ValueError, "manifest differs"):
             check_installed(PACKAGES, PACKAGES, b"other-1-r0\n")
+
+    def test_install_locked_for_both_channels(self):
+        config = {"alpine": {"repositories": [
+            "https://dl-cdn.alpinelinux.org/alpine/v3.24/main",
+            "https://dl-cdn.alpinelinux.org/alpine/v3.24/community",
+        ]}, "image": {"packages": ["incus"]}}
+        for flavor, kernel, zfs, remove in (
+            ("lts", "6.18.62-r0", "6.18.62-r0", []),
+            ("stable", "7.1.5-r0", "7.1.5-r1", ["linux-lts"]),
+        ):
+            with self.subTest(channel=flavor):
+                root = self.root / flavor
+                self.write(f"{flavor}/etc/apk/world", b"linux-lts\nalpine-base\n")
+                self.write(f"{flavor}/etc/limine/limine-efi-updater.conf")
+                channel = {"kernel_flavor": flavor, "packages": [f"linux-{flavor}", f"zfs-{flavor}"],
+                           "remove": remove}
+                entries = ("alpine-base=3.24.4-r0", "incus=7.0.1-r2", f"linux-{flavor}={kernel}",
+                           "musl=1.2.6-r3", f"zfs-{flavor}={zfs}")
+                locked = decode_lock(("\n".join(entries) + "\n").encode("ascii"))
+                expected_manifest = "\n".join(entry.replace("=", "-") for entry in entries) + "\n"
+                world = root / "etc/apk/world"
+
+                def simulate_apk(*args, **kwargs):
+                    if "add" in args:
+                        world.write_text("\n".join(entries) + "\n", encoding="ascii")
+
+                commands = Mock()
+                commands.run.side_effect = simulate_apk
+                commands.apk_query.side_effect = [locked, locked]
+                commands.guest.return_value.stdout = expected_manifest.encode("ascii")
+                with patch.multiple("scripts.build_image", run=commands.run,
+                                    apk_query=commands.apk_query, guest=commands.guest,
+                                    trigger_mounts=lambda _: nullcontext()):
+                    manifest = install_locked(root, config, channel, locked)
+
+                apk = ["chroot", str(root), "apk", "--repositories-file", "/etc/apk/repositories",
+                       "--timeout", "60", "--cache-packages=no"]
+                removal = [call.run(*apk, "del", "linux-lts", env=GUEST_ENV)] if remove else []
+                self.assertEqual(commands.mock_calls, [
+                    call.run(*apk, "update", env=GUEST_ENV),
+                    call.apk_query(apk, "--from", "repositories", "--recursive", *entries, env=GUEST_ENV),
+                    *removal,
+                    call.run(*apk, "add", *entries, env=GUEST_ENV),
+                    call.apk_query(apk, "--installed", "*", env=GUEST_ENV),
+                    call.guest(root, "apk", "info", "-v", stdout=subprocess.PIPE),
+                ])
+                self.assertEqual(manifest, expected_manifest.encode("ascii"))
+                self.assertEqual(world.read_bytes(),
+                                 f"alpine-base\nincus\nlinux-{flavor}\nzfs-{flavor}\n".encode("ascii"))
 
     def test_static_kernel_checks(self):
         for name in (ZFS, "boot/vmlinuz-lts", "boot/initramfs-lts",
